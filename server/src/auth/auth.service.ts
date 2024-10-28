@@ -1,72 +1,66 @@
-import {
-  BadRequestException,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
 import * as bcrypt from 'bcryptjs';
 import { TokensService } from 'src/tokens/tokens.service';
-import { UserEntity } from 'src/users/entities/user.entity';
+import { v4 as uuidv4 } from 'uuid';
 import { CreateUserDto } from 'src/users/dto/create-user.dto';
+import { Response } from 'express';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private usersService: UsersService,
-    private tokenService: TokensService,
+    private readonly usersService: UsersService,
+    private readonly tokensService: TokensService,
   ) {}
 
-  async login(user: UserEntity) {
-    const { accessToken, refreshToken } = this.tokenService.generatePairTokens(
-      user.id,
-    );
-    await this.tokenService.addTokenToWhiteList(user.id, refreshToken);
+  async validateUser(email: string, password: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (user && (await bcrypt.compare(password, user.password))) {
+      return user;
+    }
+    throw new UnauthorizedException('Invalid credentials');
+  }
+
+  async login(userId: string, res: Response) {
+    const jti = uuidv4();
+
+    const { accessToken, refreshToken } = await this.tokensService.generateTokens(userId, jti);
+
+    await this.tokensService.saveRefreshToken(userId, refreshToken, jti);
+
+    res.cookie('Refresh', refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+
+    res.cookie('Authentication', accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+
     return { accessToken, refreshToken };
   }
 
-  async register(createUserDto: CreateUserDto) {
-    const existingUser = await this.usersService.findOne(createUserDto.email);
+  async register(createUserDto: CreateUserDto, res: Response) {
+    const existingUser = await this.usersService.findByEmail(createUserDto.email);
 
-    if (existingUser) throw new BadRequestException('the email already in use');
+    if (existingUser) throw new BadRequestException('User already exists');
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-    const newUser = await this.usersService.create({
+    const user = await this.usersService.create({
       ...createUserDto,
       password: hashedPassword,
     });
 
-    return this.login(newUser);
+    return this.login(user.id, res);
   }
 
-  async validateUser(email: string, password: string) {
-    try {
-      const user = await this.usersService.findOne(email);
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) {
-        throw new UnauthorizedException();
-      }
-      return user;
-    } catch (err) {
-      throw new UnauthorizedException('Credentials are not valid.');
-    }
-  }
-
-  async validateUserRefreshToken(refreshToken: string, userId: string) {
-    try {
-      const user = await this.usersService.findOne(userId);
-      const userRefreshToken =
-        await this.tokenService.findRefreshTokenByUserId(userId);
-      const isMatch = await bcrypt.compare(
-        refreshToken,
-        userRefreshToken.token,
-      );
-      if (!isMatch) {
-        throw new UnauthorizedException();
-      }
-      return user;
-    } catch (err) {
-      throw new UnauthorizedException('Refresh token is not valid.');
-    }
+  async refreshTokens(token: string, res: Response) {
+    const payload = await this.tokensService.validateRefreshToken(token);
+    await this.tokensService.revokeRefreshToken(payload.jti);
+    return this.login(payload.userId, res);
   }
 }

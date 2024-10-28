@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -12,53 +12,49 @@ export class TokensService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async findRefreshTokenByUserId(id: string) {
-    const token = await this.prisma.refreshTokens.findUnique({ where: { id } });
-    return token;
-  }
-
-  async addTokenToWhiteList(userId: string, refreshToken: string) {
-    const hashedToken = await bcrypt.hash(refreshToken, 10);
-    const savedToken = await this.prisma.refreshTokens.create({
-      data: {
-        userId,
-        token: hashedToken,
-      },
-    });
-    return savedToken;
-  }
-
-  async deleteRefreshToken(id: string) {
-    const token = await this.prisma.refreshTokens.update({
-      where: { id },
-      data: { isRevoked: true },
-    });
-    return token;
-  }
-
-  generatePairTokens(userId: string) {
-    const accessToken = this.generateAcessToken(userId);
-    const refreshToken = this.generateRefreshToken(userId);
-    return { accessToken, refreshToken };
-  }
-
-  generateAcessToken(userId: string) {
-    const payload = { userId };
-    const token = this.jwtService.sign(payload, {
+  async generateTokens(userId: string, jti: string) {
+    const payload = { userId, jti };
+    const accessToken = this.jwtService.sign(payload, {
       secret: this.config.getOrThrow('JWT_ACCESS_KEY'),
       expiresIn: this.config.getOrThrow('JWT_ACCESS_EXPIN'),
     });
-    return token;
-  }
-
-  generateRefreshToken(userId: string) {
-    const payload = {
-      userId,
-    };
-    const token = this.jwtService.sign(payload, {
+    const refreshToken = this.jwtService.sign(payload, {
       secret: this.config.getOrThrow('JWT_REFRESH_KEY'),
       expiresIn: this.config.getOrThrow('JWT_REFRESH_EXPIN'),
     });
-    return token;
+    return { accessToken, refreshToken };
+  }
+
+  async validateRefreshToken(token: string) {
+    const payload = this.jwtService.verify(token, {
+      secret: this.config.getOrThrow('JWT_REFRESH_KEY'),
+    });
+    const storedToken = await this.prisma.refreshTokens.findUnique({
+      where: { id: payload.jti },
+    });
+
+    if (
+      !storedToken ||
+      storedToken.isRevoked ||
+      !bcrypt.compareSync(token, storedToken.token)
+    ) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    return payload;
+  }
+
+  async saveRefreshToken(userId: string, token: string, jti: string) {
+    const hashedToken = await bcrypt.hash(token, 10);
+    return this.prisma.refreshTokens.create({
+      data: { id: jti, userId, token: hashedToken },
+    });
+  }
+
+  async revokeRefreshToken(id: string) {
+    return this.prisma.refreshTokens.update({
+      where: { id },
+      data: { isRevoked: true },
+    });
   }
 }

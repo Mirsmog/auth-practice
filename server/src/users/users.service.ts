@@ -9,6 +9,32 @@ import { PrismaService } from 'src/prisma/prisma.service';
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
+  async findAll() {
+    const users = await this.prisma.user.findMany();
+    return users;
+  }
+
+  async findById(id: string) {
+    try {
+      const user = await this.prisma.user.findFirst({
+        where: { id },
+      });
+      return user;
+    } catch (error) {
+      throw new NotFoundException('User not found');
+    }
+  }
+
+  async findByEmail(email: string) {
+    try {
+      const user = await this.prisma.user.findFirst({
+        where: { email },
+      });
+      return user;
+    } catch (error) {
+      throw new NotFoundException('User not found');
+    }
+  }
 
   async create(createUserDto: CreateUserDto) {
     try {
@@ -16,22 +42,6 @@ export class UsersService {
       return user;
     } catch (error) {
       throw new InternalServerErrorException(error);
-    }
-  }
-
-  async findAll() {
-    const users = await this.prisma.user.findMany();
-    return users;
-  }
-
-  async findOne(query: string) {
-    try {
-      const user = await this.prisma.user.findFirst({
-        where: { OR: [{ id: query, email: query }] },
-      });
-      return user;
-    } catch (error) {
-      throw new NotFoundException('User not found');
     }
   }
 }

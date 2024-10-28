@@ -4,7 +4,8 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
 import { AuthService } from '../auth.service';
-import { TokenPayloadEntity } from 'src/tokens/entities/token-payload.entity';
+import { TokensService } from 'src/tokens/tokens.service';
+import { UsersService } from 'src/users/users.service';
 
 @Injectable()
 export class JwtRefreshStrategy extends PassportStrategy(
@@ -12,22 +13,24 @@ export class JwtRefreshStrategy extends PassportStrategy(
   'jwt-refresh',
 ) {
   constructor(
-    configService: ConfigService,
-    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+    private readonly tokensService: TokensService,
+    private readonly usersService: UsersService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
-        (request: Request) => request.cookies.Refresh,
+        (request) => request.cookies.Refresh,
       ]),
       secretOrKey: configService.getOrThrow('JWT_REFRESH_KEY'),
       passReqToCallback: true,
     });
   }
 
-  async validate(request: Request, payload: TokenPayloadEntity) {
-    return this.authService.validateUserRefreshToken(
+  async validate(request: Request) {
+    const payload = await this.tokensService.validateRefreshToken(
       request.cookies.Refresh,
-      payload.userId,
     );
+    const user = await this.usersService.findById(payload.userId);
+    return user;
   }
 }
