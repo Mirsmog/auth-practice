@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import ms from 'ms';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
@@ -22,7 +23,17 @@ export class TokensService {
       secret: this.config.getOrThrow('JWT_REFRESH_KEY'),
       expiresIn: this.config.getOrThrow('JWT_REFRESH_EXPIN'),
     });
-    return { accessToken, refreshToken };
+
+    const access_token = {
+      token: accessToken,
+      expIn: Date.now() + ms(this.config.getOrThrow<string>('JWT_ACCESS_EXPIN')),
+    };
+    const refresh_token = {
+      token: refreshToken,
+      expIn: Date.now() + ms(this.config.getOrThrow<string>('JWT_REFRESH_EXPIN')),
+    };
+
+    return { access_token, refresh_token };
   }
 
   async validateRefreshToken(token: string) {
@@ -33,11 +44,7 @@ export class TokensService {
       where: { id: payload.jti },
     });
 
-    if (
-      !storedToken ||
-      storedToken.isRevoked ||
-      !bcrypt.compareSync(token, storedToken.token)
-    ) {
+    if (!storedToken || storedToken.isRevoked || !bcrypt.compareSync(token, storedToken.token)) {
       throw new UnauthorizedException('Invalid token');
     }
 

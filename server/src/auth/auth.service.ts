@@ -24,23 +24,18 @@ export class AuthService {
   async login(userId: string, res: Response) {
     const jti = uuidv4();
 
-    const { accessToken, refreshToken } = await this.tokensService.generateTokens(userId, jti);
+    const { access_token, refresh_token } = await this.tokensService.generateTokens(userId, jti);
 
-    await this.tokensService.saveRefreshToken(userId, refreshToken, jti);
+    await this.tokensService.saveRefreshToken(userId, refresh_token.token, jti);
 
-    res.cookie('Refresh', refreshToken, {
+    res.cookie('Refresh', refresh_token.token, {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',
+      expires: new Date(refresh_token.expIn),
     });
 
-    res.cookie('Authentication', accessToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-    });
-
-    return { accessToken, refreshToken };
+    return access_token;
   }
 
   async register(createUserDto: CreateUserDto, res: Response) {

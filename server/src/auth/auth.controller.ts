@@ -16,22 +16,22 @@ export class AuthController {
   @UseGuards(AuthGuard('local'))
   @Post('login')
   async login(@CurrentUser() user: UserEntity, @Res({ passthrough: true }) res: Response) {
-    const { accessToken } = await this.authService.login(user.id, res);
-    return { accessToken };
+    const accessToken = await this.authService.login(user.id, res);
+    return accessToken;
   }
 
   @Public()
   @Post('register')
   async register(@Body() dto: CreateUserDto, @Res({ passthrough: true }) res: Response) {
-    const { accessToken } = await this.authService.register(dto, res);
-    return { accessToken };
+    const accessToken = await this.authService.register(dto, res);
+    return accessToken;
   }
 
   @Public()
   @UseGuards(JwtRefreshAuthGuard)
   @Post('refresh')
   async refreshToken(@CurrentUser() user: UserEntity, @Res({ passthrough: true }) res: Response) {
-    const { accessToken } = await this.authService.login(user.id, res);
-    return { accessToken };
+    const accessToken = await this.authService.login(user.id, res);
+    return accessToken;
   }
 }
