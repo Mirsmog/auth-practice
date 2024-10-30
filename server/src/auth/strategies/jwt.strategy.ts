@@ -1,16 +1,16 @@
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { Injectable } from '@nestjs/common';
-import { UsersService } from 'src/users/users.service';
-import { TokenPayloadEntity } from 'src/tokens/entities/token-payload.entity';
+import { AccessTokenPayload } from 'src/token/entities/access-token.entity';
+import { User } from 'src/user/entities/user.entity';
+import { UserService } from 'src/user/user.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    configService: ConfigService,
-    private readonly usersService: UsersService,
+    private readonly userService: UserService,
+    private readonly configService: ConfigService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -19,7 +19,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: TokenPayloadEntity) {
-    return this.usersService.findById(payload.userId);
+  async validate(payload: AccessTokenPayload): Promise<User> {
+    const user = await this.userService.findById(payload.sub);
+    if (user) return user;
+    throw new UnauthorizedException('Invalid token');
   }
 }

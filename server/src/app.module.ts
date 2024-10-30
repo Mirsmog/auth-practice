@@ -1,23 +1,21 @@
-import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { ConfigModule } from '@nestjs/config';
-
 import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
-import { TokensModule } from './tokens/tokens.module';
+import { UserModule } from './user/user.module';
+import { TokenModule } from './token/token.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: join(__dirname, '../../.env'),
-    }),
+    UserModule,
     AuthModule,
-    UsersModule,
-    TokensModule,
+    TokenModule,
+    ScheduleModule.forRoot(),
+    ConfigModule.forRoot({ isGlobal: true }),
   ],
+  controllers: [],
   providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
 })
 export class AppModule {}

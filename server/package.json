@@ -2,7 +2,11 @@
   "name": "server",
   "version": "0.0.1",
   "description": "",
-  "author": "",
+  "author": {
+    "name": "Mirsmog",
+    "url": "https://github.com/mirsmog",
+    "email": "tanharka.tyuchiev4@mail.ru"
+  },
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -27,6 +31,7 @@
     "@nestjs/mapped-types": "*",
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/schedule": "^4.1.1",
     "@prisma/client": "^5.21.1",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
@@ -38,7 +43,7 @@
     "passport-local": "^1.0.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "uuid": "^10.0.0"
+    "uuid": "^11.0.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
