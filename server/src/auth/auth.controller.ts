@@ -4,40 +4,45 @@ import { Controller, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common'
 import { User } from 'src/user/entities/user.entity';
 import { Public } from './decorators/public.decorator';
 import { AuthService } from './auth.service';
-import { CurrentUser } from './decorators/current-user.decorator';
+import { CurrentUser } from './decorators/user.decorator';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtRefreshAuthGuard } from './guards/jwt-refresh-auth.guard';
+import { CookieService } from './cookie.service';
+import { RefreshTokenPayload } from 'src/token/entities/refresh-token.entity';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly cookieService: CookieService,
+  ) {}
 
   @Public()
   @UseGuards(LocalAuthGuard)
   @Post('login')
   @HttpCode(200)
   async login(@CurrentUser() user: User, @Res() res: Response) {
-    const { access_token, refresh_token } = await this.authService.login(user);
+    const { accessToken, refreshToken } = await this.authService.login(user);
 
-    res.cookie('Refresh', refresh_token.token, {
-      secure: true,
-      httpOnly: true,
-      sameSite: 'lax',
-      domain: 'localhost',
-      expires: new Date(refresh_token.expIn * 1000),
+    this.cookieService.setCookie(res, 'Refresh', refreshToken.token, {
+      expires: new Date(refreshToken.expires * 1000),
     });
 
-    res.send(access_token);
+    res.send(accessToken);
   }
 
   @Public()
-  @UseGuards(JwtRefreshAuthGuard)
   @Post('logout')
   @HttpCode(200)
-  async logout(@Req() req: any, @Res() res: Response) {
-    const { jti } = req.user;
-    res.cookie('Refresh', '');
-    res.send(await this.authService.logout(jti));
+  async logout(@Req() req: Request, @Res() res: Response) {
+    const token: string = req.cookies.Refresh;
+
+    if (token) {
+      this.authService.logout(token);
+      this.cookieService.clearCookie(res, 'Refresh');
+    }
+
+    res.status(200).send({ message: 'Logout successful' });
   }
 
   @Public()
@@ -45,18 +50,13 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(200)
   async refresh(@Req() req: any, @Res() res: Response) {
-    const { user, jti } = req.user;
+    const payload: RefreshTokenPayload = req.user;
+    const { refreshToken, accessToken } = await this.authService.refreshTokens(payload);
 
-    const { access_token, refresh_token } = await this.authService.refreshTokens(user, jti);
-
-    res.cookie('Refresh', refresh_token.token, {
-      secure: true,
-      httpOnly: true,
-      sameSite: 'lax',
-      domain: 'localhost',
-      expires: new Date(refresh_token.expIn * 1000),
+    this.cookieService.setCookie(res, 'Refresh', refreshToken.token, {
+      expires: new Date(refreshToken.expires * 1000),
     });
 
-    res.send(access_token);
+    res.send(accessToken);
   }
 }

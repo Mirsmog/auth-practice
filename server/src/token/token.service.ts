@@ -3,7 +3,13 @@ import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 import { User } from 'src/user/entities/user.entity';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -25,9 +31,15 @@ export class TokenService {
   ) {}
 
   async validateRefreshToken(token: string): Promise<RefreshTokenPayload> {
-    const payload: RefreshTokenPayload = this.jwtService.verify(token, {
-      secret: this.JWT_REFRESH_KEY,
-    });
+    let payload: RefreshTokenPayload;
+
+    try {
+      payload = this.jwtService.verify(token, {
+        secret: this.JWT_REFRESH_KEY,
+      });
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
 
     const existingToken = await this.findRefreshToken(payload.jti);
 
@@ -36,6 +48,9 @@ export class TokenService {
       !existingToken.revoked &&
       (await bcrypt.compare(token, existingToken.hashedToken))
     ) {
+      if (payload.exp < Date.now() / 1000) {
+        throw new UnauthorizedException('Token expired');
+      }
       return payload;
     }
 
@@ -43,13 +58,14 @@ export class TokenService {
   }
 
   async generateTokens(user: User, jti: string) {
-    const access_token = this.generateAccessToken(user);
-    const refresh_token = this.generateRefreshToken(user, jti);
-    await this.saveRefreshToken(user.id, refresh_token.token, jti);
+    const accessToken = this.generateAccessToken(user);
+    const refreshToken = this.generateRefreshToken(user, jti);
+
+    await this.saveRefreshToken(user.id, refreshToken.token, jti);
 
     return {
-      access_token,
-      refresh_token,
+      accessToken,
+      refreshToken,
     };
   }
 
@@ -57,7 +73,7 @@ export class TokenService {
     try {
       return await this.prisma.refreshToken.findUnique({ where: { id } });
     } catch (error) {
-      throw new Error(error);
+      throw new NotFoundException('Token not found');
     }
   }
 
@@ -68,35 +84,35 @@ export class TokenService {
         data: { revoked: true },
       });
     } catch (error) {
-      throw new Error(error);
+      throw new InternalServerErrorException("Can't revoke token");
     }
   }
 
   private generateAccessToken(user: User) {
-    const expIn = Math.floor((Date.now() + ms(this.JWT_ACCESS_EXPIN)) / 1000);
+    const expires = Math.floor((Date.now() + ms(this.JWT_ACCESS_EXPIN)) / 1000);
     const payload: AccessTokenPayload = {
       sub: user.id,
       email: user.email,
-      exp: expIn,
+      exp: expires,
     };
     const token = this.jwtService.sign(payload, {
       secret: this.JWT_ACCESS_KEY,
     });
-    return { token, expIn };
+    return { token, expires };
   }
 
   private generateRefreshToken(user: User, jti: string) {
-    const expIn = Math.floor((Date.now() + ms(this.JWT_REFRESH_EXPIN)) / 1000);
+    const expires = Math.floor((Date.now() + ms(this.JWT_REFRESH_EXPIN)) / 1000);
     const payload: RefreshTokenPayload = {
       jti,
       sub: user.id,
       email: user.email,
-      exp: expIn,
+      exp: expires,
     };
     const token = this.jwtService.sign(payload, {
       secret: this.JWT_REFRESH_KEY,
     });
-    return { token, expIn };
+    return { token, expires };
   }
 
   private async saveRefreshToken(userId: string, token: string, jti: string) {

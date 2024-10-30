@@ -1,9 +1,11 @@
 import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+
+import { User } from 'src/user/entities/user.entity';
 import { UserService } from 'src/user/user.service';
 import { TokenService } from 'src/token/token.service';
-import { User } from 'src/user/entities/user.entity';
+import { RefreshTokenPayload } from 'src/token/entities/refresh-token.entity';
 
 @Injectable()
 export class AuthService {
@@ -29,19 +31,22 @@ export class AuthService {
   }
 
   async login(user: User) {
-    const jti = uuidv4();
-    return await this.tokenService.generateTokens(user, jti);
+    return await this.tokenService.generateTokens(user, uuidv4());
   }
 
-  async logout(jti: string) {
-    if (!jti) throw new UnauthorizedException('Token is missing');
-    const { userId } = await this.tokenService.revokeRefreshToken(jti);
-    return { userId };
+  async logout(token: string) {
+    const payload = await this.tokenService.validateRefreshToken(token);
+    this.tokenService.revokeRefreshToken(payload.jti);
   }
 
-  async refreshTokens(user: User, oldJti: string) {
-    const jti = uuidv4();
-    await this.tokenService.revokeRefreshToken(oldJti);
-    return await this.tokenService.generateTokens(user, jti);
+  async refreshTokens({ sub, jti }: RefreshTokenPayload) {
+    const user = await this.userService.findById(sub);
+
+    if (user) {
+      await this.tokenService.revokeRefreshToken(jti);
+      return await this.tokenService.generateTokens(user, uuidv4());
+    }
+
+    throw new NotFoundException('User not found');
   }
 }
