@@ -6,6 +6,7 @@ import { TokenModule } from './token/token.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { TodoModule } from './todo/todo.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     TokenModule,
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
+    TodoModule,
   ],
   controllers: [],
   providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
